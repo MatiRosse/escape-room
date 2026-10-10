@@ -1,0 +1,224 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BankVaultEscapeRoomState",
+  "description": "Authoritative Game State Schema for 2-Player Co-op Bank Vault Escape Room",
+  "type": "object",
+  "required": [
+    "roomId",
+    "createdAt",
+    "status",
+    "players",
+    "puzzles",
+    "inventory",
+    "environment"
+  ],
+  "properties": {
+    "roomId": {
+      "type": "string",
+      "description": "Unique room identifier"
+    },
+    "createdAt": {
+      "type": "integer",
+      "description": "Timestamp when room was initialized"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["WAITING_FOR_PLAYERS", "IN_PROGRESS", "ESCAPED"],
+      "description": "Current room state"
+    },
+    "escapeTimeSeconds": {
+      "type": ["number", "null"],
+      "description": "Total elapsed time in seconds upon escaping"
+    },
+    "players": {
+      "type": "object",
+      "description": "Connected players indexed by socket ID",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "slot", "name", "color", "position", "rotation", "holdingItem", "isUvActive"],
+        "properties": {
+          "id": { "type": "string" },
+          "slot": { "type": "integer", "enum": [1, 2], "description": "1 = Agente Alfa, 2 = Agente Bravo" },
+          "name": { "type": "string" },
+          "color": { "type": "string", "description": "HEX color string for player avatar" },
+          "position": {
+            "type": "object",
+            "required": ["x", "y", "z"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "z": { "type": "number" }
+            }
+          },
+          "rotation": {
+            "type": "object",
+            "required": ["yaw", "pitch"],
+            "properties": {
+              "yaw": { "type": "number" },
+              "pitch": { "type": "number" }
+            }
+          },
+          "holdingItem": {
+            "type": ["string", "null"],
+            "enum": [null, "uv_flashlight", "master_fuse", "security_keycard"]
+          },
+          "isUvActive": { "type": "boolean" },
+          "ping": { "type": "number" }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "description": "Shared/Individual inventory tracking",
+      "properties": {
+        "uv_flashlight": {
+          "type": "object",
+          "properties": {
+            "collected": { "type": "boolean" },
+            "holder": { "type": ["string", "null"] }
+          }
+        },
+        "master_fuse": {
+          "type": "object",
+          "properties": {
+            "collected": { "type": "boolean" },
+            "holder": { "type": ["string", "null"] },
+            "placed": { "type": "boolean" }
+          }
+        },
+        "security_keycard": {
+          "type": "object",
+          "properties": {
+            "collected": { "type": "boolean" },
+            "holder": { "type": ["string", "null"] },
+            "inserted": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "puzzles": {
+      "type": "object",
+      "description": "Status of the four puzzle sequences in the antechamber",
+      "required": ["puzzleA", "puzzleB", "puzzleC", "puzzleD"],
+      "properties": {
+        "puzzleA": {
+          "type": "object",
+          "description": "Pista A: Luz UV y billete enmarcado",
+          "properties": {
+            "deskDrawerOpen": { "type": "boolean", "default": false },
+            "uvFlashlightFound": { "type": "boolean", "default": false },
+            "framedBillIlluminated": { "type": "boolean", "default": false },
+            "secretRevealed": { "type": "boolean", "default": false },
+            "clueEquation": { "type": "string", "default": "(84 + 92) * 27 + 73" }
+          }
+        },
+        "puzzleB": {
+          "type": "object",
+          "description": "Pista B: Registro de clientes y caja de seguridad #104",
+          "properties": {
+            "archiveFolderInspected": { "type": "boolean", "default": false },
+            "targetClient": { "type": "string", "default": "Viktor Vance" },
+            "targetDateCode": { "type": "string", "default": "1407" },
+            "safe104Unlocked": { "type": "boolean", "default": false },
+            "safe104DoorOpen": { "type": "boolean", "default": false }
+          }
+        },
+        "puzzleC": {
+          "type": "object",
+          "description": "Pista C: Panel de fusibles y bypass eléctrico",
+          "properties": {
+            "guardManualInspected": { "type": "boolean", "default": false },
+            "fusePanelDoorOpen": { "type": "boolean", "default": false },
+            "masterFuseInserted": { "type": "boolean", "default": false },
+            "breakerStates": {
+              "type": "array",
+              "items": { "type": "boolean" },
+              "minItems": 4,
+              "maxItems": 4,
+              "description": "States of 4 breaker switches [SW1, SW2, SW3, SW4]"
+            },
+            "breakerTargetPattern": {
+              "type": "array",
+              "items": { "type": "boolean" },
+              "description": "Target pattern [true, false, true, true] according to guard manual"
+            },
+            "powerRestored": { "type": "boolean", "default": false }
+          }
+        },
+        "puzzleD": {
+          "type": "object",
+          "description": "Pista D: Teclado numérico, volante de presión y apertura de la bóveda",
+          "properties": {
+            "keypadPowered": { "type": "boolean", "default": false },
+            "keycardSwiped": { "type": "boolean", "default": false },
+            "keypadDisplay": { "type": "string", "default": "" },
+            "correctVaultCode": { "type": "string", "default": "4829" },
+            "vaultLockDisengaged": { "type": "boolean", "default": false },
+            "vaultWheelTurnAngle": { "type": "number", "default": 0 },
+            "vaultWheelFullyTurned": { "type": "boolean", "default": false },
+            "vaultDoorOpen": { "type": "boolean", "default": false }
+          }
+        },
+        "puzzleE": {
+          "type": "object",
+          "description": "Sala 2 - Pista E: Frecuencias Cuánticas Alfa y Bravo",
+          "properties": {
+            "tabletInspected": { "type": "boolean", "default": false },
+            "terminalAlfaFreq": { "type": "number", "default": 0 },
+            "terminalBravoFreq": { "type": "number", "default": 0 },
+            "targetAlfaFreq": { "type": "number", "default": 432 },
+            "targetBravoFreq": { "type": "number", "default": 528 },
+            "coreHarmonized": { "type": "boolean", "default": false }
+          }
+        },
+        "puzzleF": {
+          "type": "object",
+          "description": "Sala 2 - Pista F: Consola de la Barrera Láser de Seguridad",
+          "properties": {
+            "laserCodeEntered": { "type": "string", "default": "" },
+            "correctLaserCode": { "type": "string", "default": "960" },
+            "laserGridDisabled": { "type": "boolean", "default": false }
+          }
+        },
+        "puzzleG": {
+          "type": "object",
+          "description": "Sala 2 - Pista G: Esclusa de Evacuación Final / Pod de Escape",
+          "properties": {
+            "airlockUnlocked": { "type": "boolean", "default": false },
+            "launchActivated": { "type": "boolean", "default": false }
+          }
+        }
+      }
+    },
+    "synergy": {
+      "type": "object",
+      "properties": {
+        "score": { "type": "number", "default": 0 },
+        "lastGreetTime": { "type": "number", "default": 0 },
+        "comboActive": { "type": "boolean", "default": false }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "description": "Physical room states for animations and lighting",
+      "properties": {
+        "emergencyLightsActive": { "type": "boolean", "default": true },
+        "mainLightsActive": { "type": "boolean", "default": false },
+        "ambientLightIntensity": { "type": "number", "default": 0.3 }
+      }
+    },
+    "activityLog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "timestamp": { "type": "integer" },
+          "sender": { "type": "string" },
+          "text": { "type": "string" },
+          "type": { "type": "string", "enum": ["info", "action", "success", "alert"] }
+        }
+      }
+    }
+  }
+}

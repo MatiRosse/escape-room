@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Escape Room 3D Cooperativo - Bóveda de Banco</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <!-- Canvas 3D de Three.js -->
+  <div id="game-container">
+    <canvas id="webgl-canvas"></canvas>
+  </div>
+
+  <!-- HUD Principal del Jugador -->
+  <div id="hud-overlay" class="hud-overlay hidden">
+    <!-- Barra Superior de Estado y Conexión -->
+    <header class="hud-header">
+      <div class="hud-badge team-status">
+        <div class="status-indicator live"></div>
+        <span class="label">SISTEMA BÓVEDA OMEGA</span>
+        <span class="room-tag" id="hud-room-tag">SALA: BOVEDA-1</span>
+      </div>
+
+      <div class="hud-badge phase-badge" id="hud-phase-badge">
+        <span class="phase-dot"></span>
+        <span id="hud-phase-text">FASE 1: BÓVEDA</span>
+      </div>
+
+      <!-- Squad roster: COMPLETAMENTE OCULTO EN SOLITARIO, solo se muestra si entra otro jugador -->
+      <div class="hud-agents hidden" id="hud-squad-roster">
+        <div class="agent-pill self slot-1" id="pill-slot-1">
+          <span class="agent-dot" id="dot-slot-1"></span>
+          <span class="agent-name" id="name-slot-1">Alfa (Tú)</span>
+        </div>
+        <div class="agent-pill slot-2 hidden" id="pill-slot-2">
+          <span class="agent-dot" id="dot-slot-2"></span>
+          <span class="agent-name" id="name-slot-2">Bravo</span>
+        </div>
+        <div class="agent-pill slot-3 hidden" id="pill-slot-3">
+          <span class="agent-dot" id="dot-slot-3"></span>
+          <span class="agent-name" id="name-slot-3">Charlie</span>
+        </div>
+        <div class="agent-pill slot-4 hidden" id="pill-slot-4">
+          <span class="agent-dot" id="dot-slot-4"></span>
+          <span class="agent-name" id="name-slot-4">Delta</span>
+        </div>
+      </div>
+
+      <div class="hud-badge synergy-badge hidden" id="hud-synergy-badge" title="Presiona [1] para saludarse y subir la sinergia">
+        <span class="synergy-heart">💖</span>
+        <span class="synergy-label">SINERGIA:</span>
+        <span class="synergy-value" id="hud-synergy-val">100%</span>
+      </div>
+
+      <div class="hud-badge mission-timer">
+        <span class="timer-label">TIEMPO</span>
+        <span class="timer-value" id="hud-timer">00:00</span>
+      </div>
+
+      <div class="hud-header-tools">
+        <button class="hud-badge btn-sound-toggle" id="btn-sound-toggle" title="Silenciar / Activar audio [M]">
+          <span id="sound-icon">🔊</span>
+          <span id="sound-label">AUDIO</span>
+        </button>
+
+        <button class="hud-badge btn-help-controls" id="btn-help-controls" title="Guía táctica de controles [H]">
+          <span>❓</span>
+          <span>AYUDA [H]</span>
+        </button>
+
+        <button class="hud-badge btn-reset-mission" id="btn-reset-mission" title="Reiniciar misión desde cero">
+          <span class="reset-icon">🔄</span>
+          <span>REINICIAR</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Cinta de Navegación y Brújula Táctica -->
+    <div class="hud-compass" id="hud-compass">
+      <span class="compass-icon">🧭</span>
+      <span class="compass-cardinal" id="compass-cardinal">NORTE</span>
+      <span class="compass-degrees" id="compass-deg">000°</span>
+    </div>
+
+    <!-- Guía y Objetivo de Misión -->
+    <div class="hud-mission-guide" id="hud-mission-guide">
+      <div class="mission-guide-header">
+        <span class="guide-icon">🎯</span>
+        <span class="guide-title">OBJETIVO ACTUAL</span>
+        <button class="btn-toggle-guide" id="btn-toggle-guide" title="Minimizar / Mostrar">👁️</button>
+      </div>
+      <div class="mission-guide-desc" id="hud-mission-desc">
+        Inspecciona el mobiliario y los compartimentos de la antecámara.
+      </div>
+    </div>
+
+    <!-- Crosshair Central con Tooltip Dinámico -->
+    <div id="crosshair-container" class="crosshair-container">
+      <div id="crosshair" class="crosshair">
+        <div class="crosshair-dot"></div>
+        <div class="crosshair-ring"></div>
+        <div class="crosshair-bars">
+          <span class="bar bar-top"></span>
+          <span class="bar bar-bottom"></span>
+          <span class="bar bar-left"></span>
+          <span class="bar bar-right"></span>
+        </div>
+      </div>
+      <div id="interaction-prompt" class="interaction-prompt hidden">
+        <span class="key-badge" id="prompt-key">E</span>
+        <span class="prompt-text" id="prompt-text">Interactuar</span>
+      </div>
+    </div>
+
+    <!-- Toast Flotante de Saludo / Emote en Pantalla -->
+    <div id="greeting-toast" class="greeting-toast hidden">
+      <span class="toast-icon">👋</span>
+      <span class="toast-msg" id="toast-msg">¡Hola mi amorcito! ❤️</span>
+    </div>
+
+    <!-- Registro de Seguridad en Vivo (Terminal Flotante Derecha) -->
+    <aside class="activity-terminal" id="activity-terminal">
+      <div class="terminal-header">
+        <span class="terminal-title">REGISTRO DE RED</span>
+        <span class="terminal-sub">ACTIVO</span>
+      </div>
+      <div class="terminal-body" id="terminal-logs">
+        <!-- Logs dinámicos -->
+      </div>
+    </aside>
+
+    <!-- Indicador de Linterna UV Activa -->
+    <div id="uv-active-indicator" class="uv-active-indicator hidden">
+      <div class="uv-icon">✦</div>
+      <span>LUZ UV ACTIVA [F]</span>
+    </div>
+
+    <!-- Barra Inferior de Inventario Rápido y Saludo -->
+    <footer class="hud-footer">
+      <div class="hud-actions-bar">
+        <button id="btn-quick-greet" class="btn-greet hidden" title="Saludar a tu compañero (Tecla 1)">
+          <span class="greet-icon">👋</span>
+          <span class="greet-text"><strong>[1]</strong> SALUDAR</span>
+        </button>
+
+        <div class="inventory-bar" id="inventory-bar">
+          <div class="slot-item empty" data-slot="1" id="slot-1" title="Ranura 1 [Tecla 2]">
+            <span class="slot-num">2</span>
+            <div class="slot-content">
+              <span class="item-name">Vacío</span>
+            </div>
+          </div>
+          <div class="slot-item empty" data-slot="2" id="slot-2" title="Ranura 2 [Tecla 3]">
+            <span class="slot-num">3</span>
+            <div class="slot-content">
+              <span class="item-name">Vacío</span>
+            </div>
+          </div>
+          <div class="slot-item empty" data-slot="3" id="slot-3" title="Ranura 3 [Tecla 4]">
+            <span class="slot-num">4</span>
+            <div class="slot-content">
+              <span class="item-name">Vacío</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-guide">
+        <span class="guide-highlight"><kbd>1</kbd> Saludar 👋</span>
+        <span><kbd>WASD</kbd> Moverse</span>
+        <span><kbd>CLICK</kbd> Interactuar</span>
+        <span><kbd>F</kbd> Luz UV</span>
+        <span><kbd>ESC</kbd> Cursor</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Pantalla de Inicio / Lobby de Sala -->
+  <div id="lobby-modal" class="modal-backdrop">
+    <div class="modal-card lobby-card">
+      <div class="card-glow"></div>
+      <div class="classified-stamp">ALTO SECRETO</div>
+      <h1 class="game-title" id="lobby-title">ESCAPE MULTIJUGADOR 3D</h1>
+      <p class="game-subtitle" id="lobby-subtitle">COOPERATIVO EN TIEMPO REAL PARA HASTA 4 JUGADORES</p>
+
+      <!-- Selector de Mapas -->
+      <div class="map-picker-section">
+        <span class="picker-label">SELECCIONA EL MAPA DE ESCAPE:</span>
+        <div class="map-cards-container">
+          <div class="map-card active" id="card-map-vault" data-theme="vault">
+            <div class="card-badge">CIENCIA FICCIÓN</div>
+            <div class="card-icon">🏛️</div>
+            <h4 class="card-title">Bóveda Omega</h4>
+            <p class="card-desc">2 Cámaras: Antecámara de Seguridad y Núcleo Cuántico Láser.</p>
+          </div>
+          <div class="map-card" id="card-map-circus" data-theme="circus">
+            <div class="card-badge badge-horror">TERROR & PAYASOS</div>
+            <div class="card-icon">🎪</div>
+            <h4 class="card-title">Circo Maldito</h4>
+            <p class="card-desc">La Carpa de los Payasos Asesinos, autómatas macabros y caja sorpresa.</p>
+          </div>
+        </div>
+        <input type="hidden" id="selected-map-theme" value="vault">
+      </div>
+
+      <div class="briefing-box" id="lobby-briefing-box">
+        <h3 id="briefing-title">INFORME DE MISIÓN: BÓVEDA OMEGA</h3>
+        <p id="briefing-desc">Están atrapados en la antecámara blindada de máxima seguridad. Para escapar deben colaborar en equipo (hasta 4 agentes: Alfa, Bravo, Charlie y Delta):</p>
+        <ul id="briefing-list">
+          <li><strong>Directiva 1:</strong> La seguridad de la antecámara oculta marcas invisibles; exploren el mobiliario e inspeccionen cada rincón.</li>
+          <li><strong>Directiva 2:</strong> Los archivos confidenciales y el manual técnico contienen las claves del protocolo de emergencia.</li>
+          <li><strong>Directiva 3:</strong> La energía auxiliar debe ser estabilizada para alimentar los sistemas biométricos de la compuerta.</li>
+          <li><strong>Directiva 4:</strong> Solo descifrando los cálculos aritméticos de los fundadores podrán abrir la cámara del núcleo.</li>
+        </ul>
+      </div>
+
+      <form id="lobby-form" class="lobby-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="player-name-input">Nombre de Agente:</label>
+            <input type="text" id="player-name-input" value="Agente" maxlength="16" required>
+          </div>
+          <div class="form-group">
+            <label for="room-id-input">Código de Operación (Sala):</label>
+            <input type="text" id="room-id-input" value="escape-1" maxlength="16" required>
+          </div>
+        </div>
+
+        <input type="hidden" id="ws-url-input" value="wss://escape-room-boveda.andresbulghe.workers.dev/ws">
+
+        <button type="submit" id="btn-enter" class="btn-primary" style="margin-top: 0.5rem;">
+          <span class="btn-icon">⚡</span>
+          <span>ENTRAR A LA MISIÓN</span>
+        </button>
+      </form>
+
+      <div class="tips-footer">
+        <span>💡 Puedes abrir esta misma página en <strong>hasta 4 pestañas o dispositivos diferentes</strong> para jugar en escuadrón cooperativo en tiempo real.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Bloqueo de Puntero (Instrucción para retomar el control) -->
+  <div id="click-to-play" class="modal-backdrop pointer-prompt hidden">
+    <div class="pointer-card">
+      <div class="pulse-radar"></div>
+      <h2>HAZ CLICK PARA TOMAR EL CONTROL</h2>
+      <p>Mueve el mouse para mirar alrededor y presiona <kbd>ESC</kbd> para liberar el cursor.</p>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODALES DE INSPECCIÓN Y PUZZLES ESPECÍFICOS             -->
+  <!-- ======================================================== -->
+
+  <!-- Modal Puzzle B: Carpeta Archivadora de Clientes -->
+  <div id="modal-archive" class="inspect-modal hidden">
+    <div class="inspect-panel folder-panel">
+      <button class="btn-close-inspect" data-close="modal-archive">✕ CERRAR [ESC]</button>
+      <div class="dossier-paper">
+        <div class="dossier-header">
+          <div class="dossier-logo">BANCO CENTRAL DE RESERVA DE SUIZA</div>
+          <div class="dossier-stamp">CONFIDENCIAL - USO INTERNO</div>
+        </div>
+        <h2 class="dossier-title">REGISTRO DE ARRENDATARIOS DE CAJAS DE SEGURIDAD</h2>
+        <p class="dossier-note">Nota de la Jefatura: <em>"Investigar al titular sospechoso vinculado al fraude de bonos federales. El código maestro de su caja #104 se configuró como el día y mes de su apertura (DDMM)."</em></p>
+        
+        <table class="dossier-table">
+          <thead>
+            <tr>
+              <th>Caja #</th>
+              <th>Titular de la Cuenta</th>
+              <th>Fecha de Contrato</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>101</td>
+              <td>Elena Rostova</td>
+              <td>03/02/1995</td>
+              <td>Al día</td>
+            </tr>
+            <tr class="highlighted-row">
+              <td><strong>104</strong></td>
+              <td><strong>Viktor Vance (Bajo Investigación)</strong></td>
+              <td><strong>14/07/1998</strong></td>
+              <td><span class="badge-alert">Sospechoso</span></td>
+            </tr>
+            <tr>
+              <td>107</td>
+              <td>Marcus Aurel</td>
+              <td>22/11/2001</td>
+              <td>Al día</td>
+            </tr>
+            <tr>
+              <td>112</td>
+              <td>Sophia Sterling</td>
+              <td>09/05/2004</td>
+              <td>Al día</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="dossier-footer">
+          <span>Aviso de Seguridad: Las cerraduras de seguridad privada se configuran según el día y mes de contratación de cada titular (DDMM).</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Puzzle C: Manual del Guardia de Seguridad -->
+  <div id="modal-manual" class="inspect-modal hidden">
+    <div class="inspect-panel manual-panel">
+      <button class="btn-close-inspect" data-close="modal-manual">✕ CERRAR [ESC]</button>
+      <div class="manual-book">
+        <div class="manual-header">
+          <span class="manual-badge">MANUAL TÉCNICO V-4</span>
+          <h2>SISTEMA ELÉCTRICO DE CONTENCIÓN AUXILIAR</h2>
+        </div>
+        <div class="manual-content">
+          <div class="manual-section">
+            <h3>1. Restablecimiento del Circuito Primario:</h3>
+            <p>En caso de corte automático, inserte el <strong>Fusible Maestro Cerámico</strong> en el slot central del panel eléctrico.</p>
+          </div>
+          <div class="manual-section">
+            <h3>2. Secuencia de Disyuntores de Fase (Interruptores 1 al 4):</h3>
+            <p>Para evitar una sobrecarga del generador secundario, la configuración de los 4 interruptores térmicos DEBE ser idéntica a la matriz de seguridad:</p>
+            <div class="switch-diagram">
+              <div class="diagram-switch on">
+                <span class="switch-num">SW 1</span>
+                <span class="switch-state">ARRIVA (ON)</span>
+              </div>
+              <div class="diagram-switch off">
+                <span class="switch-num">SW 2</span>
+                <span class="switch-state">ABAJO (OFF)</span>
+              </div>
+              <div class="diagram-switch on">
+                <span class="switch-num">SW 3</span>
+                <span class="switch-state">ARRIBA (ON)</span>
+              </div>
+              <div class="diagram-switch on">
+                <span class="switch-num">SW 4</span>
+                <span class="switch-state">ARRIBA (ON)</span>
+              </div>
+            </div>
+            <p class="manual-warning">⚠️ Advertencia: Cualquier otra combinación mantendrá el circuito en modo seguro e impedirá energizar la esclusa de la bóveda.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Puzzle B: Cerradura de Caja Fuerte #104 -->
+  <div id="modal-safe104" class="inspect-modal hidden">
+    <div class="inspect-panel safe-panel">
+      <button class="btn-close-inspect" data-close="modal-safe104">✕ CERRAR [ESC]</button>
+      <div class="safe-ui">
+        <div class="safe-header">
+          <span class="safe-tag">CAJA DE SEGURIDAD PRIVADA #104</span>
+          <span class="safe-sub" id="safe-status-subtitle">MECANISMO DE COMBINACIÓN MECÁNICA DE 4 CIFRAS</span>
+        </div>
+
+        <!-- Vista 1: Diales de Cerradura (Cuando está cerrada) -->
+        <div id="safe-locked-section" class="safe-locked-section">
+          <div class="safe-dials">
+            <div class="dial-column" data-dial="0">
+              <button class="btn-dial btn-dial-up">▲</button>
+              <div class="dial-digit" id="dial-0">0</div>
+              <button class="btn-dial btn-dial-down">▼</button>
+            </div>
+            <div class="dial-column" data-dial="1">
+              <button class="btn-dial btn-dial-up">▲</button>
+              <div class="dial-digit" id="dial-1">0</div>
+              <button class="btn-dial btn-dial-down">▼</button>
+            </div>
+            <div class="dial-column" data-dial="2">
+              <button class="btn-dial btn-dial-up">▲</button>
+              <div class="dial-digit" id="dial-2">0</div>
+              <button class="btn-dial btn-dial-down">▼</button>
+            </div>
+            <div class="dial-column" data-dial="3">
+              <button class="btn-dial btn-dial-up">▲</button>
+              <div class="dial-digit" id="dial-3">0</div>
+              <button class="btn-dial btn-dial-down">▼</button>
+            </div>
+          </div>
+          <div class="safe-actions">
+            <button id="btn-unlock-safe" class="btn-action">🔓 DESBLOQUEAR CERROJO</button>
+          </div>
+        </div>
+
+        <!-- Vista 2: Interior Abierto de la Caja Fuerte (Claridad 100% de que está abierta) -->
+        <div id="safe-unlocked-section" class="safe-unlocked-section hidden">
+          <div class="safe-interior-banner">
+            <div class="interior-status-led"></div>
+            <div class="interior-banner-info">
+              <h3>¡CAJA FUERTE #104 ABIERTA Y DESBLOQUEADA!</h3>
+              <p>El compartimento blindado se ha abierto de par en par. Contiene los siguientes suministros críticos:</p>
+            </div>
+          </div>
+
+          <div class="safe-loot-compartment">
+            <!-- Item 1: Fusible Maestro -->
+            <div class="compartment-item-card" id="loot-card-fuse">
+              <div class="loot-badge-icon">⚡</div>
+              <div class="loot-details">
+                <h4>Fusible Maestro Cerámico 380V</h4>
+                <p>Componente industrial para el panel de energía auxiliar.</p>
+                <span class="loot-state" id="loot-fuse-state">Estado: En el compartimento</span>
+              </div>
+              <button id="btn-modal-take-fuse" class="btn-action btn-sm">RECOGER FUSIBLE</button>
+            </div>
+
+            <!-- Item 2: Tarjeta de Seguridad -->
+            <div class="compartment-item-card" id="loot-card-keycard">
+              <div class="loot-badge-icon">💳</div>
+              <div class="loot-details">
+                <h4>Tarjeta Magnética Nivel 5 (Acceso Bóveda)</h4>
+                <p>Autorización de alta gerencia para el lector magnético.</p>
+                <span class="loot-state" id="loot-keycard-state">Estado: En el compartimento</span>
+              </div>
+              <button id="btn-modal-take-keycard" class="btn-action btn-sm">RECOGER TARJETA</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="safe-feedback" class="feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Puzzle C: Panel de Fusibles y Disyuntores Interactivo -->
+  <div id="modal-fusebox" class="inspect-modal hidden">
+    <div class="inspect-panel fusebox-panel">
+      <button class="btn-close-inspect" data-close="modal-fusebox">✕ CERRAR [ESC]</button>
+      <div class="fusebox-ui">
+        <div class="fusebox-header">
+          <div class="high-voltage-icon">⚡</div>
+          <div>
+            <h3>PANEL DE ALIMENTACIÓN AUXILIAR 380V</h3>
+            <span class="status-sub" id="fusebox-status-text">ESTADO: SIN ENERGÍA</span>
+          </div>
+        </div>
+
+        <div class="fusebox-body">
+          <!-- Receptáculo de Fusible Maestro -->
+          <div class="fuse-slot-container">
+            <h4>RECEPTÁCULO PRINCIPAL</h4>
+            <div id="master-fuse-slot" class="master-fuse-slot empty">
+              <span id="fuse-slot-label">SIN FUSIBLE</span>
+            </div>
+            <button id="btn-insert-fuse" class="btn-action btn-sm">INSERTAR FUSIBLE MAESTRO</button>
+          </div>
+
+          <!-- 4 Interruptores Térmicos -->
+          <div class="breakers-container">
+            <h4>DISYUNTORES DE FASE</h4>
+            <div class="breakers-grid">
+              <div class="breaker-item" data-index="0">
+                <span class="breaker-label">SW-1</span>
+                <div class="breaker-switch off" id="breaker-0">
+                  <div class="switch-handle"></div>
+                </div>
+                <span class="breaker-value" id="val-0">OFF</span>
+              </div>
+              <div class="breaker-item" data-index="1">
+                <span class="breaker-label">SW-2</span>
+                <div class="breaker-switch off" id="breaker-1">
+                  <div class="switch-handle"></div>
+                </div>
+                <span class="breaker-value" id="val-1">OFF</span>
+              </div>
+              <div class="breaker-item" data-index="2">
+                <span class="breaker-label">SW-3</span>
+                <div class="breaker-switch off" id="breaker-2">
+                  <div class="switch-handle"></div>
+                </div>
+                <span class="breaker-value" id="val-2">OFF</span>
+              </div>
+              <div class="breaker-item" data-index="3">
+                <span class="breaker-label">SW-4</span>
+                <div class="breaker-switch off" id="breaker-3">
+                  <div class="switch-handle"></div>
+                </div>
+                <span class="breaker-value" id="val-3">OFF</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Puzzle D: Teclado Numérico y Lector de la Bóveda -->
+  <div id="modal-keypad" class="inspect-modal hidden">
+    <div class="inspect-panel keypad-panel">
+      <button class="btn-close-inspect" data-close="modal-keypad">✕ CERRAR [ESC]</button>
+      <div class="keypad-terminal">
+        <div class="keypad-header">
+          <div class="terminal-led" id="keypad-led"></div>
+          <span class="terminal-label">TERMINAL DE ACCESO BÓVEDA OMEGA</span>
+        </div>
+
+        <!-- Pantalla LCD -->
+        <div class="keypad-display" id="keypad-display">
+          <span class="cursor-blink">></span>
+          <span id="keypad-display-text" class="display-digits">------</span>
+        </div>
+
+        <div class="keycard-reader-row">
+          <div class="reader-status" id="keycard-reader-status">RANURA DE TARJETA: INACTIVA</div>
+          <button id="btn-swipe-keycard" class="btn-action btn-sm">DESLIZAR TARJETA MAGNÉTICA</button>
+        </div>
+
+        <!-- Botonera Numérica -->
+        <div class="keypad-buttons">
+          <button class="key-btn" data-key="1">1</button>
+          <button class="key-btn" data-key="2">2</button>
+          <button class="key-btn" data-key="3">3</button>
+          <button class="key-btn" data-key="4">4</button>
+          <button class="key-btn" data-key="5">5</button>
+          <button class="key-btn" data-key="6">6</button>
+          <button class="key-btn" data-key="7">7</button>
+          <button class="key-btn" data-key="8">8</button>
+          <button class="key-btn" data-key="9">9</button>
+          <button class="key-btn key-clear" data-key="CLEAR">CLR</button>
+          <button class="key-btn" data-key="0">0</button>
+          <button class="key-btn key-enter" data-key="ENTER">ENT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Puzzle A: Inspección Detallada del Billete Histórico -->
+  <div id="modal-bill" class="inspect-modal hidden">
+    <div class="inspect-panel bill-panel">
+      <button class="btn-close-inspect" data-close="modal-bill">✕ CERRAR [ESC]</button>
+      <div class="bill-view">
+        <div class="bill-frame-wrapper" id="bill-frame-wrapper">
+          <canvas id="bill-inspect-canvas" width="700" height="350"></canvas>
+        </div>
+        <div class="bill-controls">
+          <span id="bill-uv-status" class="bill-uv-text">LUZ NORMAL ACTIVA</span>
+          <button id="btn-toggle-bill-uv" class="btn-primary btn-sm">ENCENDER LUZ ULTRAVIOLETA (UV)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODALES DE SALA 2: NÚCLEO CUÁNTICO & LÁSER              -->
+  <!-- ======================================================== -->
+
+  <!-- Modal Pista E: Bitácora del Núcleo Cuántico (Tablet) -->
+  <div id="modal-room2-tablet" class="inspect-modal hidden">
+    <div class="inspect-panel tablet-panel">
+      <button class="btn-close-inspect" data-close="modal-room2-tablet">✕ CERRAR [ESC]</button>
+      <div class="holo-tablet">
+        <div class="holo-header">
+          <div class="holo-badge">REGISTRO DE CONTENCIÓN CUÁNTICA</div>
+          <h2>PROTOCOLO DE ESCAPATORIA: NÚCLEO OMEGA</h2>
+        </div>
+        <div class="holo-body">
+          <div class="holo-section">
+            <span class="holo-icon">⚡</span>
+            <div>
+              <h3>1. ALINEACIÓN DE RESONANCIA COOPERATIVA</h3>
+              <p>Al violar la compuerta de la bóveda, la esclusa de escape se protegió tras un campo de barrera láser tri-fásico. Para apagarlo, ambos robots deben sintonizar sus respectivas consolas:</p>
+              <ul>
+                <li><strong>Canal Alfa (Consola Izquierda):</strong> Sintonizar a la frecuencia armónica base de <strong>432 Hz</strong>.</li>
+                <li><strong>Canal Bravo (Consola Derecha):</strong> Sintonizar a la frecuencia de transformación de <strong>528 Hz</strong>.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="holo-section">
+            <span class="holo-icon">🔐</span>
+            <div>
+              <h3>2. CLAVE DE DESACTIVACIÓN LÁSER</h3>
+              <p>Una vez alcanzada la resonancia armónica en el Núcleo, introduzcan en la <strong>Consola del Láser</strong> la suma armónica resultante de ambas frecuencias de fase:</p>
+              <div class="formula-box">
+                <code>FRECUENCIA RESULTANTE = f(Canal Alfa) + f(Canal Bravo)</code>
+              </div>
+            </div>
+          </div>
+          <div class="holo-footer-tip">
+            <span>💖 ¡Consejo para los robots enamorados!: Si se saludan con la tecla <strong>[1]</strong>, aumentarán su nivel de Sinergia y sincronía mental.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Consola Alfa: Sintonizador Cuántico 432 Hz -->
+  <div id="modal-terminal-alfa" class="inspect-modal hidden">
+    <div class="inspect-panel tuner-panel tuner-alfa">
+      <button class="btn-close-inspect" data-close="modal-terminal-alfa">✕ CERRAR [ESC]</button>
+      <div class="tuner-card">
+        <div class="tuner-header">
+          <span class="tuner-badge badge-cyan">CANAL CUÁNTICO ALFA</span>
+          <h2>CALIBRADOR DE RESONANCIA PRIMARIA</h2>
+        </div>
+        <div class="tuner-display">
+          <div class="freq-screen">
+            <span class="freq-label">FRECUENCIA ACTUAL:</span>
+            <div class="freq-number-row">
+              <span class="freq-number" id="freq-val-alfa">000</span>
+              <span class="freq-unit">Hz</span>
+            </div>
+            <div class="freq-status" id="freq-status-alfa">ESTADO: DESALINEADO</div>
+          </div>
+        </div>
+        <div class="tuner-controls">
+          <div class="control-row">
+            <button class="btn-freq" data-channel="alfa" data-delta="-100">-100</button>
+            <button class="btn-freq" data-channel="alfa" data-delta="-10">-10</button>
+            <button class="btn-freq" data-channel="alfa" data-delta="-1">-1</button>
+            <button class="btn-freq btn-add" data-channel="alfa" data-delta="1">+1</button>
+            <button class="btn-freq btn-add" data-channel="alfa" data-delta="10">+10</button>
+            <button class="btn-freq btn-add" data-channel="alfa" data-delta="100">+100</button>
+          </div>
+          <button class="btn-action btn-full" id="btn-sync-alfa">BLOQUEAR FRECUENCIA ALFA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Consola Bravo: Sintonizador Cuántico 528 Hz -->
+  <div id="modal-terminal-bravo" class="inspect-modal hidden">
+    <div class="inspect-panel tuner-panel tuner-bravo">
+      <button class="btn-close-inspect" data-close="modal-terminal-bravo">✕ CERRAR [ESC]</button>
+      <div class="tuner-card">
+        <div class="tuner-header">
+          <span class="tuner-badge badge-amber">CANAL CUÁNTICO BRAVO</span>
+          <h2>CALIBRADOR DE RESONANCIA SECUNDARIA</h2>
+        </div>
+        <div class="tuner-display">
+          <div class="freq-screen">
+            <span class="freq-label">FRECUENCIA ACTUAL:</span>
+            <div class="freq-number-row">
+              <span class="freq-number" id="freq-val-bravo">000</span>
+              <span class="freq-unit">Hz</span>
+            </div>
+            <div class="freq-status" id="freq-status-bravo">ESTADO: DESALINEADO</div>
+          </div>
+        </div>
+        <div class="tuner-controls">
+          <div class="control-row">
+            <button class="btn-freq" data-channel="bravo" data-delta="-100">-100</button>
+            <button class="btn-freq" data-channel="bravo" data-delta="-10">-10</button>
+            <button class="btn-freq" data-channel="bravo" data-delta="-1">-1</button>
+            <button class="btn-freq btn-add" data-channel="bravo" data-delta="1">+1</button>
+            <button class="btn-freq btn-add" data-channel="bravo" data-delta="10">+10</button>
+            <button class="btn-freq btn-add" data-channel="bravo" data-delta="100">+100</button>
+          </div>
+          <button class="btn-action btn-full" id="btn-sync-bravo">BLOQUEAR FRECUENCIA BRAVO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Consola de la Barrera Láser (Código 960) -->
+  <div id="modal-laser-console" class="inspect-modal hidden">
+    <div class="inspect-panel laser-panel">
+      <button class="btn-close-inspect" data-close="modal-laser-console">✕ CERRAR [ESC]</button>
+      <div class="keypad-terminal laser-terminal">
+        <div class="keypad-header">
+          <div class="terminal-led laser-led" id="laser-led"></div>
+          <span class="terminal-label">SISTEMA DE ANULACIÓN: BARRERA LÁSER</span>
+        </div>
+        <div class="core-status-bar" id="core-status-display">
+          ESTADO DEL NÚCLEO: ESPERANDO SINCRONIZACIÓN DE FRECUENCIAS
+        </div>
+        <div class="keypad-display" id="laser-display">
+          <span class="cursor-blink">></span>
+          <span id="laser-display-text" class="display-digits">---</span>
+        </div>
+        <div class="keypad-buttons">
+          <button class="laser-btn" data-lkey="1">1</button>
+          <button class="laser-btn" data-lkey="2">2</button>
+          <button class="laser-btn" data-lkey="3">3</button>
+          <button class="laser-btn" data-lkey="4">4</button>
+          <button class="laser-btn" data-lkey="5">5</button>
+          <button class="laser-btn" data-lkey="6">6</button>
+          <button class="laser-btn" data-lkey="7">7</button>
+          <button class="laser-btn" data-lkey="8">8</button>
+          <button class="laser-btn" data-lkey="9">9</button>
+          <button class="laser-btn key-clear" data-lkey="CLEAR">CLR</button>
+          <button class="laser-btn" data-lkey="0">0</button>
+          <button class="laser-btn key-enter" data-lkey="ENTER">ENT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODALES DE CIRCO MALDITO (MAPA TERROR DE PAYASOS)        -->
+  <!-- ======================================================== -->
+
+  <!-- Modal Circo: Afiche del Payaso Siniestro (Pista de Código) -->
+  <div id="modal-clown-poster" class="inspect-modal hidden">
+    <div class="inspect-panel poster-panel">
+      <button class="btn-close-inspect" data-close="modal-clown-poster">✕ CERRAR [ESC]</button>
+      <div class="poster-inspect-card">
+        <div class="poster-stamp">CIRCO DEL TERROR</div>
+        <h2>EL GRAN PAYASO "GIGGLES"</h2>
+        <div class="poster-clown-art">
+          <div class="art-smile">🤡</div>
+          <p class="blood-whisper">
+            "Siete pecados en la carpa oscura,<br>
+            Tres payasos en la cuerda floja,<br>
+            Cuatro fieras rugiendo de locura,<br>
+            Y Un solo escape antes de que la música cese."
+          </p>
+        </div>
+        <p class="poster-note">Grabado al pie: 'La función comienza cuando las cifras encajan...'</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Circo: Mesa de Maquillaje y Cuchillo de Domador -->
+  <div id="modal-circus-knife" class="inspect-modal hidden">
+    <div class="inspect-panel knife-panel">
+      <button class="btn-close-inspect" data-close="modal-circus-knife">✕ CERRAR [ESC]</button>
+      <div class="vanity-inspect-card">
+        <div class="card-icon">🔪</div>
+        <h2>TOCADOR DEL CIRCO</h2>
+        <p>Sobre el tocador descansa un cuchillo afilado de utilería circense.</p>
+        <button id="btn-modal-take-knife" class="btn-action">RECOGER CUCHILLO</button>
+        <div id="knife-feedback" class="feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Circo: Globo Maldito con Manivela -->
+  <div id="modal-circus-balloon" class="inspect-modal hidden">
+    <div class="inspect-panel balloon-panel">
+      <button class="btn-close-inspect" data-close="modal-circus-balloon">✕ CERRAR [ESC]</button>
+      <div class="balloon-inspect-card">
+        <div class="balloon-float-anim">🎈</div>
+        <h2>GLOBO DE HELIO MALDITO</h2>
+        <p>Un globo rojo tenso flota en el centro de la carpa. Atado a su cuerda cuelga un objeto metálico fuera del alcance de la mano.</p>
+        <div class="balloon-action-box">
+          <button id="btn-modal-pop-balloon" class="btn-action">💥 REVENTAR GLOBO</button>
+          <button id="btn-modal-take-crank" class="btn-action btn-secondary hidden">⚙️ RECOGER OBJETO DEL SUELO</button>
+        </div>
+        <div id="balloon-feedback" class="feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Circo: Cabina del Payaso Autómata -->
+  <div id="modal-animatronic" class="inspect-modal hidden">
+    <div class="inspect-panel animatronic-panel">
+      <button class="btn-close-inspect" data-close="modal-animatronic">✕ CERRAR [ESC]</button>
+      <div class="animatronic-card">
+        <div class="animatronic-header">
+          <span class="booth-tag">CABINA MECÁNICA DEL PAYASO ADIVINO</span>
+        </div>
+        <div class="clown-face-box">
+          <div class="clown-eyes-glow" id="booth-eyes-indicator">👁️ 👁️</div>
+          <h3 id="booth-speech-text">"¡JAJAJAJA! ¿QUIEREN ESCAPAR VIVOS DE MI CARPA?"</h3>
+        </div>
+        <p>Un autómata mecánico en una vitrina de cristal. Una vieja palanca frontal aguarda ser accionada.</p>
+        <button id="btn-modal-activate-booth" class="btn-action">⚡ ACCIONAR PALANCA DE LA CABINA</button>
+        <div id="animatronic-feedback" class="feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Circo: Caja de Sorpresas (Jack-in-the-Box) -->
+  <div id="modal-jackbox" class="inspect-modal hidden">
+    <div class="inspect-panel jackbox-panel">
+      <button class="btn-close-inspect" data-close="modal-jackbox">✕ CERRAR [ESC]</button>
+      <div class="jackbox-card">
+        <h2>CAJA DE SORPRESAS DEL BUFÓN</h2>
+        <p>Una enorme caja decorada con rombos de arlequín. Tiene un engranaje lateral y un candado con clave de 4 dígitos.</p>
+
+        <div class="jackbox-crank-status" id="jackbox-crank-status">
+          <span id="jackbox-crank-text">MANIVELA: <strong>NO INSERTADA</strong></span>
+          <button id="btn-modal-insert-crank" class="btn-action btn-sm hidden">INSERTAR MANIVELA</button>
+        </div>
+
+        <div class="safe-dials jack-dials">
+          <div class="dial-column" data-jdial="0">
+            <button class="btn-dial btn-dial-up">▲</button>
+            <div class="dial-digit" id="jdial-0">0</div>
+            <button class="btn-dial btn-dial-down">▼</button>
+          </div>
+          <div class="dial-column" data-jdial="1">
+            <button class="btn-dial btn-dial-up">▲</button>
+            <div class="dial-digit" id="jdial-1">0</div>
+            <button class="btn-dial btn-dial-down">▼</button>
+          </div>
+          <div class="dial-column" data-jdial="2">
+            <button class="btn-dial btn-dial-up">▲</button>
+            <div class="dial-digit" id="jdial-2">0</div>
+            <button class="btn-dial btn-dial-down">▼</button>
+          </div>
+          <div class="dial-column" data-jdial="3">
+            <button class="btn-dial btn-dial-up">▲</button>
+            <div class="dial-digit" id="jdial-3">0</div>
+            <button class="btn-dial btn-dial-down">▼</button>
+          </div>
+        </div>
+
+        <button id="btn-modal-crank-jack" class="btn-action">🎵 GIRAR MANIVELA Y ABRIR CAJA</button>
+        
+        <!-- Loot de la caja de sorpresas abierta -->
+        <div id="jack-loot-section" class="jack-loot-section hidden">
+          <div class="loot-opened-banner">
+            <span>🎁 ¡LA CABEZA DEL PAYASO HA SALIDO DISPARADA!</span>
+            <p>Entre sus dientes sostiene dos objetos metálicos.</p>
+          </div>
+          <div class="jack-loot-buttons">
+            <button id="btn-modal-take-tamer-key" class="btn-primary btn-sm">RECOGER LLAVE ANTIGUA</button>
+            <button id="btn-modal-take-cage-lever" class="btn-primary btn-sm">RECOGER PALANCA METÁLICA</button>
+          </div>
+        </div>
+
+        <div id="jackbox-feedback" class="feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Circo: Reja de Salida (Jaula de Fieras) -->
+  <div id="modal-circus-cage" class="inspect-modal hidden">
+    <div class="inspect-panel cage-panel">
+      <button class="btn-close-inspect" data-close="modal-circus-cage">✕ CERRAR [ESC]</button>
+      <div class="cage-card">
+        <div class="cage-bars-art">🚪⛓️</div>
+        <h2>REJA DE ESCAPE: JAULA DE LAS FIERAS</h2>
+        <p>Un pesado portón de barrotes de hierro oxidado con un candado de calavera y un hueco para la palanca de liberación.</p>
+        <button id="btn-modal-escape-circus" class="btn-action btn-danger">🏃 ABRIR Y ESCAPAR DEL CIRCO MALDITO</button>
+        <div id="circus-cage-feedback" class="feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Guía Táctica y Controles (Tecla [H]) -->
+  <div id="modal-controls-guide" class="inspect-modal hidden">
+    <div class="inspect-panel controls-guide-panel">
+      <button class="btn-close-inspect" data-close="modal-controls-guide">✕ CERRAR [ESC / H]</button>
+      <div class="controls-guide-card">
+        <div class="controls-guide-header">
+          <div class="guide-badge">CENTRO DE OPERACIONES</div>
+          <h2>GUÍA DE MANDOS Y COLABORACIÓN</h2>
+          <p>Instrucciones de movimiento, exploración física y funciones cooperativas.</p>
+        </div>
+
+        <div class="controls-matrix-grid">
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+            <div class="matrix-info">
+              <strong>Desplazamiento</strong>
+              <span>Moverse libremente por las cámaras</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>SHIFT</kbd></div>
+            <div class="matrix-info">
+              <strong>Sombra Táctica</strong>
+              <span>Correr a máxima velocidad</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>C</kbd> / <kbd>CTRL</kbd></div>
+            <div class="matrix-info">
+              <strong>Agacharse</strong>
+              <span>Inspeccionar bajo escritorios y huecos bajos</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>F</kbd></div>
+            <div class="matrix-info">
+              <strong>Linterna Ultravioleta (UV)</strong>
+              <span>Revelar marcas y ecuaciones ocultas</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>E</kbd> / <kbd>CLICK</kbd></div>
+            <div class="matrix-info">
+              <strong>Interactuar</strong>
+              <span>Abrir cajones, examinar terminales y cajas</span>
+            </div>
+          </div>
+
+          <div class="matrix-card highlight-card">
+            <div class="matrix-keys"><kbd>1</kbd></div>
+            <div class="matrix-info">
+              <strong>Saludar / Enviar Amor 💖</strong>
+              <span>Incrementar la Sinergia y sincronía de pareja</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></div>
+            <div class="matrix-info">
+              <strong>Inventario Rápido</strong>
+              <span>Seleccionar herramientas recolectadas</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>M</kbd></div>
+            <div class="matrix-info">
+              <strong>Silenciar Audio</strong>
+              <span>Activar / Desactivar sonidos y música</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>H</kbd></div>
+            <div class="matrix-info">
+              <strong>Guía de Controles</strong>
+              <span>Abrir / Cerrar esta pantalla de ayuda</span>
+            </div>
+          </div>
+
+          <div class="matrix-card">
+            <div class="matrix-keys"><kbd>ESC</kbd></div>
+            <div class="matrix-info">
+              <strong>Cursor / Pausa</strong>
+              <span>Liberar el ratón y cerrar ventanas</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pantalla de Victoria / Misión Cumplida -->
+  <div id="victory-modal" class="modal-backdrop hidden">
+    <div class="modal-card victory-card">
+      <div class="victory-glow"></div>
+      <div class="victory-badge">MISIÓN CUMPLIDA</div>
+      <h2>¡ESCAPE TOTAL CON ÉXITO!</h2>
+      <p class="victory-sub">Ambos robots han superado la Bóveda de Banco y la Cámara del Núcleo Cuántico trabajando en equipo.</p>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">TIEMPO TOTAL:</span>
+          <span class="stat-val" id="victory-time">04:20</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">SALAS SUPERADAS:</span>
+          <span class="stat-val text-success">2 / 2 (100%)</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">SINERGIA DE PAREJA:</span>
+          <span class="stat-val text-accent" id="victory-synergy">💖 MÁXIMA</span>
+        </div>
+      </div>
+
+      <p class="love-note">¡Gran trabajo en equipo con tu amorcito! 🤖❤️🤖</p>
+
+      <button id="btn-replay" class="btn-primary">
+        <span>🔄 JUGAR OTRA VEZ</span>
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
