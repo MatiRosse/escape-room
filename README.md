@@ -1,5 +1,8 @@
 # 🏛️ Escape Room 3D Cooperativo: Bóveda de Banco (Omega Protocol)
 
+[![Deploy to Cloudflare Workers](https://github.com/andresbulgheroni/escape-room/actions/workflows/deploy.yml/badge.svg)](https://github.com/andresbulgheroni/escape-room/actions/workflows/deploy.yml)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)](https://escape-room-boveda.andresbulghe.workers.dev)
+
 Prototipo completo y funcional de un videojuego en primera persona 3D para navegador, cooperativo para 2 jugadores en simultáneo, ambientado en la antecámara blindada de un banco de máxima seguridad.
 
 ---

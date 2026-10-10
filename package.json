@@ -1,6 +1,6 @@
 {
   "name": "escape-room-bank-vault-coop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Escape Room Cooperativo en 3D para 2 Jugadores - Antecámara de Bóveda de Banco",
   "main": "server/server.js",
   "type": "module",
