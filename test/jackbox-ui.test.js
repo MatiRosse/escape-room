@@ -17,6 +17,7 @@ function harness() {
     if (!elements.has(id)) {
       const classes = new Set();
       elements.set(id, {
+        id,
         textContent: '', innerHTML: '', value: '', style: {}, disabled: false,
         parentElement: { style: {} },
         classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value) },
@@ -39,6 +40,7 @@ function harness() {
   Object.assign(game, {
     network: { serverUrl: 'ws://localhost:3001/ws', sendAction: (action, payload) => actions.push({ action, payload }) },
     scene: { applyGameState() {} }, displayedLogIds: new Set(), jackDials: [7, 3, 4, 1],
+    controls: { lock() {}, unlock() {} },
     updatePartnerStatus() {}, updateInventoryUI() {}, updateMissionObjectiveUI() {}
   });
   game.setupUIBindings();
@@ -70,4 +72,18 @@ test('Screenshot regression: clicking an already open box cannot report a missin
   assert.equal(actions.length, 0);
   assert.equal(sfx.length, 0);
   assert.equal(element('jack-loot-section').classList.contains('hidden'), false);
+});
+
+test('World poster interaction schedules a local scare and closing the clue cancels it', () => {
+  const { game, element, actions } = harness();
+  const calls = [];
+  game.posterScare = { schedule: () => calls.push('schedule'), dismiss: () => calls.push('dismiss') };
+  element('modal-clown-poster').classList.add('hidden');
+  game.handleWorldInteraction('CIRCUS_POSTER');
+  assert.equal(element('modal-clown-poster').classList.contains('hidden'), false);
+  assert.deepEqual(calls, ['schedule']);
+  game.closeModal('modal-clown-poster');
+  assert.equal(element('modal-clown-poster').classList.contains('hidden'), true);
+  assert.deepEqual(calls, ['schedule', 'dismiss']);
+  assert.equal(actions.length, 0);
 });

@@ -527,6 +527,54 @@ class SoundEngine {
       // -------------------------------------------------------------
       // HORROR CIRCUS & EVIL CLOWN SOUNDS
       // -------------------------------------------------------------
+      case 'clown_screamer': {
+        // A short, rough vocal shriek, routed through the existing mute control.
+        const duration = 1.05;
+        const voice = this.ctx.createOscillator();
+        const vibrato = this.ctx.createOscillator();
+        const vibratoGain = this.ctx.createGain();
+        const noise = this.ctx.createBufferSource();
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+        const noiseGain = this.ctx.createGain();
+
+        voice.type = 'sawtooth';
+        voice.frequency.setValueAtTime(280, now);
+        voice.frequency.exponentialRampToValueAtTime(820, now + 0.09);
+        voice.frequency.exponentialRampToValueAtTime(190, now + duration);
+        vibrato.frequency.setValueAtTime(37, now);
+        vibratoGain.gain.setValueAtTime(45, now);
+        vibrato.connect(vibratoGain);
+        vibratoGain.connect(voice.frequency);
+
+        const buffer = this.ctx.createBuffer(1, Math.ceil(this.ctx.sampleRate * duration), this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        noise.buffer = buffer;
+        noiseGain.gain.setValueAtTime(0.22, now);
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1600, now);
+        filter.frequency.exponentialRampToValueAtTime(700, now + duration);
+        filter.Q.value = 1.2;
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.32, now + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        voice.connect(filter);
+        noise.connect(noiseGain);
+        noiseGain.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.destNode || this.ctx.destination);
+        const sources = [voice, vibrato, noise];
+        voice.onended = () => {
+          [voice, vibrato, noise, vibratoGain, noiseGain, filter, gain].forEach(node => node.disconnect());
+        };
+        sources.forEach(source => { source.start(now); source.stop(now + duration); });
+        return () => sources.forEach(source => {
+          try { source.stop(); } catch { /* Already finished. */ }
+        });
+      }
+
       case 'clown_laugh': {
         // Procedural sinister clown cackle: "HE-HE-HE-HA-HA-HA!"
         // Staccato laughing bursts with descending/modulating formants

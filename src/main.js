@@ -4,6 +4,7 @@ import { NetworkClient } from './network.js';
 import { sound } from './audio.js';
 import { renderBanknoteCanvas } from './textures.js';
 import { getJackboxState } from '../shared/jackbox.js';
+import { CircusPosterScare } from './circus-scare.js';
 
 class EscapeGame {
   constructor() {
@@ -67,6 +68,14 @@ class EscapeGame {
       onSfxTrigger: (sfx) => sound.playSFX(sfx),
       onNewLog: (log) => this.addLogToTerminal(log),
       onError: (err) => this.handleNetworkError(err)
+    });
+
+    this.posterScare = new CircusPosterScare({
+      poster: document.getElementById('modal-clown-poster'),
+      overlay: document.getElementById('circus-screamer'),
+      image: document.getElementById('circus-screamer-image'),
+      playSound: () => sound.playSFX('clown_screamer'),
+      storage: window.sessionStorage
     });
 
     // 4. Bind UI & Modals
@@ -227,6 +236,12 @@ class EscapeGame {
 
     // Global keyboard handler for modals, puzzles, and inventory
     document.addEventListener('keydown', (e) => {
+      if (this.posterScare?.active) {
+        if (e.key === 'Escape') this.posterScare.dismiss();
+        else if (e.code === 'KeyM') this.toggleAudioMute();
+        e.preventDefault();
+        return;
+      }
       const openModal = document.querySelector('.inspect-modal:not(.hidden)');
 
       if (e.key === 'Escape') {
@@ -289,6 +304,10 @@ class EscapeGame {
       } else if (e.code === 'KeyH') {
         this.toggleControlsGuide();
       }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.posterScare?.dismiss();
     });
 
     // Sound toggle button in HUD
@@ -611,6 +630,8 @@ class EscapeGame {
     const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
     if (modal) {
       modal.classList.remove('hidden');
+      if (modal.id === 'modal-clown-poster') this.posterScare?.schedule();
+      else this.posterScare?.dismiss();
     }
   }
 
@@ -618,6 +639,7 @@ class EscapeGame {
     const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
     if (modal) {
       modal.classList.add('hidden');
+      if (modal.id === 'modal-clown-poster') this.posterScare?.dismiss();
     }
     this.controls.lock();
   }
@@ -820,6 +842,7 @@ class EscapeGame {
 
   onGameStateUpdate(state) {
     this.gameState = state;
+    this.posterScare?.updateState(state);
 
     // Apply to 3D scene
     this.scene.applyGameState(state);
