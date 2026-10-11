@@ -1,4 +1,5 @@
 // Cloudflare Worker + Durable Objects for Escape Room 3D Co-op
+import { getJackboxState, insertJackCrank } from '../shared/jackbox.js';
 
 function createInitialState(roomId, mapTheme = 'vault') {
   const isCircus = mapTheme === 'circus';
@@ -709,13 +710,7 @@ export class EscapeRoomDO extends DurableObject {
       }
 
       case 'INSERT_JACK_CRANK': {
-        const hasCrank = state.circusInventory.jack_crank?.collected || state.circusInventory.circusCrank?.collected || state.circusInventory.jackCrank?.collected;
-        if (hasCrank && !state.circusPuzzles.jackCrankInserted) {
-          state.circusPuzzles.jackCrankInserted = true;
-          state.circusPuzzles.crankInserted = true;
-          state.circusInventory.jack_crank.inserted = true;
-          state.circusInventory.circusCrank.inserted = true;
-          state.circusInventory.jackCrank.inserted = true;
+        if (!getJackboxState(state).crankInserted && insertJackCrank(state)) {
           stateModified = true;
           sfxTrigger = 'switch_click';
           this.addLog(playerName, 'Acopló la manivela al mecanismo lateral de la caja.', 'action');
@@ -724,8 +719,16 @@ export class EscapeRoomDO extends DurableObject {
       }
 
       case 'SUBMIT_JACK_CODE': {
+        const jackbox = getJackboxState(state);
+        if (jackbox.open) break;
+        if (!jackbox.hasCrank) {
+          sfxTrigger = 'access_denied';
+          this.addLog(playerName, 'Falta la manivela en el mecanismo de la caja del bufón.', 'alert');
+          break;
+        }
         const code = String(payload?.code || '').trim();
         if (code === state.circusPuzzles.targetClownCode) { // '7341'
+          insertJackCrank(state);
           state.circusPuzzles.jackBoxUnlocked = true;
           state.circusPuzzles.jackSpringPopped = true;
           state.circusPuzzles.jackPopped = true;
@@ -740,7 +743,7 @@ export class EscapeRoomDO extends DurableObject {
       }
 
       case 'TAKE_TAMER_KEY': {
-        if (state.circusPuzzles.jackBoxUnlocked && !state.circusInventory.tamer_key?.collected) {
+        if (getJackboxState(state).open && !state.circusInventory.tamer_key?.collected) {
           state.circusInventory.tamer_key.collected = true;
           state.circusInventory.tamer_key.holder = playerId;
           state.circusInventory.tamerKey.collected = true;
@@ -754,7 +757,7 @@ export class EscapeRoomDO extends DurableObject {
       }
 
       case 'TAKE_CAGE_LEVER': {
-        if (state.circusPuzzles.jackBoxUnlocked && !state.circusInventory.cage_lever?.collected) {
+        if (getJackboxState(state).open && !state.circusInventory.cage_lever?.collected) {
           state.circusInventory.cage_lever.collected = true;
           state.circusInventory.cage_lever.holder = playerId;
           state.circusInventory.cageLever.collected = true;

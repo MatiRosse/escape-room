@@ -40,13 +40,19 @@ export class NetworkClient {
       const protocol = isHttps ? 'wss:' : 'ws:';
       const host = window.location.hostname;
 
+      if (['localhost', '127.0.0.1', '[::1]'].includes(host)) {
+        // Vite's dev client and the Node WebSocket server use separate ports.
+        const port = window.location.port === '5173' ? '3001' : window.location.port;
+        return `${protocol}//${host}${port ? `:${port}` : ''}/ws`;
+      }
+
       // If already hosted on Cloudflare Workers or public domain
       if (host && host !== 'localhost' && host !== '127.0.0.1') {
         return `${protocol}//${window.location.host}/ws`;
       }
     }
 
-    // Default to the live Cloudflare Worker WebSocket server
+    // Fallback for environments without a browser location.
     return DEFAULT_CLOUDFLARE_WS_URL;
   }
 

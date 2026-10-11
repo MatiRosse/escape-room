@@ -3,6 +3,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getJackboxState, insertJackCrank } from '../shared/jackbox.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -323,9 +324,6 @@ wss.on('connection', (ws) => {
           player: playerInfo,
           roomStatus: room.state.status
         }, clientWs);
-          roomStatus: room.state.status
-        }, clientWs);
-
         console.log(`[ROOM ${room.id}] ${playerInfo.name} (${playerId}) unido como Slot ${assignedSlot}`);
         break;
       }
@@ -757,13 +755,7 @@ wss.on('connection', (ws) => {
       }
 
       case 'INSERT_JACK_CRANK': {
-        const hasCrank = state.circusInventory.jack_crank?.collected || state.circusInventory.circusCrank?.collected || state.circusInventory.jackCrank?.collected;
-        if (hasCrank && !state.circusPuzzles.jackCrankInserted) {
-          state.circusPuzzles.jackCrankInserted = true;
-          state.circusPuzzles.crankInserted = true;
-          state.circusInventory.jack_crank.inserted = true;
-          state.circusInventory.circusCrank.inserted = true;
-          state.circusInventory.jackCrank.inserted = true;
+        if (!getJackboxState(state).crankInserted && insertJackCrank(state)) {
           stateModified = true;
           sfxTrigger = 'switch_click';
           addLog(room, playerName, 'Acopló la manivela al mecanismo lateral de la caja.', 'action');
@@ -772,8 +764,16 @@ wss.on('connection', (ws) => {
       }
 
       case 'SUBMIT_JACK_CODE': {
+        const jackbox = getJackboxState(state);
+        if (jackbox.open) break;
+        if (!jackbox.hasCrank) {
+          sfxTrigger = 'access_denied';
+          addLog(room, playerName, 'Falta la manivela en el mecanismo de la caja del bufón.', 'alert');
+          break;
+        }
         const code = String(payload?.code || '').trim();
         if (code === state.circusPuzzles.targetClownCode) { // "7341"
+          insertJackCrank(state);
           state.circusPuzzles.jackBoxUnlocked = true;
           state.circusPuzzles.jackSpringPopped = true;
           state.circusPuzzles.jackPopped = true;
@@ -788,7 +788,7 @@ wss.on('connection', (ws) => {
       }
 
       case 'TAKE_TAMER_KEY': {
-        if (state.circusPuzzles.jackBoxUnlocked && !state.circusInventory.tamer_key?.collected) {
+        if (getJackboxState(state).open && !state.circusInventory.tamer_key?.collected) {
           state.circusInventory.tamer_key = { collected: true, holder: playerId };
           state.circusInventory.tamerKey = { collected: true, holder: playerId };
           state.circusPuzzles.tamerKeyCollected = true;
@@ -800,7 +800,7 @@ wss.on('connection', (ws) => {
       }
 
       case 'TAKE_CAGE_LEVER': {
-        if (state.circusPuzzles.jackBoxUnlocked && !state.circusInventory.cage_lever?.collected) {
+        if (getJackboxState(state).open && !state.circusInventory.cage_lever?.collected) {
           state.circusInventory.cage_lever = { collected: true, holder: playerId };
           state.circusInventory.cageLever = { collected: true, holder: playerId };
           state.circusPuzzles.cageLeverCollected = true;

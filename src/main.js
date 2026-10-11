@@ -3,6 +3,7 @@ import { PlayerControls } from './controls.js';
 import { NetworkClient } from './network.js';
 import { sound } from './audio.js';
 import { renderBanknoteCanvas } from './textures.js';
+import { getJackboxState } from '../shared/jackbox.js';
 
 class EscapeGame {
   constructor() {
@@ -127,9 +128,8 @@ class EscapeGame {
 
     if (wsUrlInput) {
       const savedWsUrl = localStorage.getItem('escape_ws_url');
-      if (savedWsUrl) {
-        wsUrlInput.value = savedWsUrl;
-      }
+      const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+      wsUrlInput.value = isLocal ? this.network.serverUrl : (savedWsUrl || this.network.serverUrl);
     }
 
     lobbyForm.addEventListener('submit', async (e) => {
@@ -430,8 +430,8 @@ class EscapeGame {
     });
 
     document.getElementById('btn-modal-insert-crank')?.addEventListener('click', () => {
-      const inv = this.gameState?.circusInventory;
-      const hasCrank = inv?.jack_crank?.collected || inv?.circusCrank?.collected || inv?.jackCrank?.collected || this.gameState?.circusPuzzles?.crankCollected;
+      const { hasCrank, crankInserted, open } = getJackboxState(this.gameState);
+      if (crankInserted || open) return;
       const jackFb = document.getElementById('jackbox-feedback');
       if (!hasCrank) {
         sound.playSFX('access_denied');
@@ -446,32 +446,24 @@ class EscapeGame {
     });
 
     document.getElementById('btn-modal-crank-jack')?.addEventListener('click', () => {
-      let isCrankInserted = this.gameState?.circusPuzzles?.jackCrankInserted || this.gameState?.circusPuzzles?.crankInserted;
-      const inv = this.gameState?.circusInventory;
-      const hasCrank = inv?.jack_crank?.collected || inv?.circusCrank?.collected || inv?.jackCrank?.collected || this.gameState?.circusPuzzles?.crankCollected;
-
-      if (!isCrankInserted) {
-        if (hasCrank) {
-          this.network.sendAction('INSERT_JACK_CRANK');
-          sound.playSFX('switch_click');
-          isCrankInserted = true;
-        } else {
-          const jackFb = document.getElementById('jackbox-feedback');
-          if (jackFb) {
-            jackFb.textContent = '❌ El mecanismo está trabado. Falta un accionador en el engranaje lateral.';
-            jackFb.style.color = '#ff5252';
-          }
-          sound.playSFX('access_denied');
-          return;
+      const { hasCrank, open } = getJackboxState(this.gameState);
+      if (open) return;
+      if (!hasCrank) {
+        const jackFb = document.getElementById('jackbox-feedback');
+        if (jackFb) {
+          jackFb.textContent = '❌ El mecanismo está trabado. Falta un accionador en el engranaje lateral.';
+          jackFb.style.color = '#ff5252';
         }
+        sound.playSFX('access_denied');
+        return;
       }
       sound.playSFX('creepy_music_box');
+      // The server inserts the crank and opens the box in one authoritative action.
       this.network.sendAction('SUBMIT_JACK_CODE', { code: this.jackDials.join('') });
       // The server only broadcasts on success, so show a failure message if the box stays shut
       clearTimeout(this.jackCodeTimeout);
       this.jackCodeTimeout = setTimeout(() => {
-        const cp = this.gameState?.circusPuzzles;
-        if (cp && !(cp.jackBoxUnlocked || cp.jackPopped || cp.jackSpringPopped)) {
+        if (this.gameState?.circusPuzzles && !getJackboxState(this.gameState).open) {
           const jackFb = document.getElementById('jackbox-feedback');
           if (jackFb) {
             jackFb.textContent = '🎵 La melodía se corta en seco... la tapa sigue cerrada.';
@@ -914,7 +906,7 @@ class EscapeGame {
       const popBtn = document.getElementById('btn-modal-pop-balloon');
       const crankBtn = document.getElementById('btn-modal-take-crank');
       const balloonFb = document.getElementById('balloon-feedback');
-      const hasCrank = state.circusInventory?.jack_crank?.collected || state.circusInventory?.circusCrank?.collected || state.circusInventory?.jackCrank?.collected || state.circusPuzzles.crankCollected;
+      const { hasCrank, crankInserted: isCrankInserted, open: isJackPopped } = getJackboxState(state);
 
       if (state.circusPuzzles.balloonPopped) {
         if (popBtn) popBtn.classList.add('hidden');
@@ -957,7 +949,6 @@ class EscapeGame {
       const jackLoot = document.getElementById('jack-loot-section');
       const jackFb = document.getElementById('jackbox-feedback');
 
-      const isCrankInserted = state.circusPuzzles.jackCrankInserted || state.circusPuzzles.crankInserted;
       if (isCrankInserted) {
         if (crankStatusText) crankStatusText.innerHTML = 'MANIVELA: <strong style="color:#00e676">INSERTADA ✓</strong>';
         if (insertCrankBtn) insertCrankBtn.classList.add('hidden');
@@ -971,8 +962,14 @@ class EscapeGame {
         }
       }
 
-      const isJackPopped = state.circusPuzzles.jackPopped || state.circusPuzzles.jackSpringPopped || state.circusPuzzles.jackBoxUnlocked;
+      const crankJackBtn = document.getElementById('btn-modal-crank-jack');
+      if (crankJackBtn) {
+        crankJackBtn.disabled = isJackPopped;
+        crankJackBtn.textContent = isJackPopped ? '✓ CAJA ABIERTA' : '🎵 GIRAR MANIVELA Y ABRIR CAJA';
+      }
       if (isJackPopped) {
+        clearTimeout(this.jackCodeTimeout);
+        if (insertCrankBtn) insertCrankBtn.classList.add('hidden');
         if (jackLoot) jackLoot.classList.remove('hidden');
         if (jackFb) {
           jackFb.textContent = '🎁 ¡Caja de sorpresas abierta!';
@@ -1200,11 +1197,11 @@ class EscapeGame {
         descEl.innerHTML = '🎪 <strong>Carpa del Terror:</strong> Explora la carpa e investiga los rincones en busca de pistas y herramientas.';
       } else if (!cpuz.balloonPopped) {
         descEl.innerHTML = '🎈 <strong>Anomalía Flotante:</strong> Algo cuelga en el centro de la carpa; investiga cómo alcanzarlo.';
-      } else if (!cinv.jack_crank?.collected) {
+      } else if (!getJackboxState(state).hasCrank) {
         descEl.innerHTML = '⚙️ <strong>Restos del Espectáculo:</strong> Inspecciona el suelo donde cayó el objeto desprendido.';
       } else if (!cpuz.animatronicActive) {
         descEl.innerHTML = '🎪 <strong>El Espectáculo:</strong> Investiga los carteles y los mecanismos del circo.';
-      } else if (!cpuz.jackBoxUnlocked) {
+      } else if (!getJackboxState(state).open) {
         descEl.innerHTML = '🎁 <strong>Caja de Sorpresas:</strong> Acopla las piezas recuperadas y deduce la combinación del bufón.';
       } else if (!cinv.tamerKey?.collected) {
         descEl.innerHTML = '🗝️ <strong>Herramientas de Escape:</strong> Inspecciona el interior de la caja de sorpresas.';
@@ -1335,11 +1332,11 @@ class EscapeGame {
       // Slot 2: Circus Crank
       const slot2 = document.getElementById('slot-2');
       if (slot2) {
-        if (inv.circusCrank?.collected) {
+        if (getJackboxState(state).hasCrank) {
           slot2.className = 'slot-item has-item';
           slot2.querySelector('.slot-content').innerHTML = `
             <span class="slot-icon">⚙️</span>
-            <span class="item-name">${inv.circusCrank?.used ? 'Manivela (Puesta)' : 'Manivela Dorada'}</span>
+            <span class="item-name">${getJackboxState(state).crankInserted ? 'Manivela (Puesta)' : 'Manivela Dorada'}</span>
           `;
         } else {
           slot2.className = 'slot-item empty';
